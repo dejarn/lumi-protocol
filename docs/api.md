@@ -2,7 +2,7 @@
 
 _Last updated: 2026-05-20_
 
-lumi-protocol exposes two implementations: `bridge/node` (TypeScript, consumed by the mqtt-bridge) and `device/arduino` (Arduino framework, flashed on each ESP32).
+lumi-protocol provides implementations for each target platform. Current implementations: `bridge/node` (TypeScript, consumed by the mqtt-bridge) and `device/arduino` (Arduino framework, flashed on IoT devices).
 
 ## bridge/node (TypeScript)
 
