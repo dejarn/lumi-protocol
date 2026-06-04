@@ -11,7 +11,7 @@ type PublishCallback = (err?: Error) => void;
 function makeMqtt() {
   let messageHandler: ((topic: string, buf: Buffer) => void) | undefined;
   const mock = {
-    publish: vi.fn<[string, Buffer, PublishCallback], void>(),
+    publish: vi.fn<(topic: string, payload: Buffer, cb: PublishCallback) => void>(),
     subscribe: vi.fn(),
     on: vi.fn((_event: string, cb: (topic: string, buf: Buffer) => void) => {
       messageHandler = cb;
