@@ -1,12 +1,26 @@
 import { EventEmitter } from 'events';
 import { LumiCodec } from './codec';
+import { LumiTimeoutError } from './errors';
+import { DeviceRegistry } from './registry';
+import {
+  AnimationIdValue,
+  LumiDevice,
+  LumiFrame,
+  LumiState,
+  Opcode,
+  OpcodeValue,
+  PayloadAck,
+  PayloadDiscoveryAnnounce,
+  PayloadError,
+  PayloadSetAnimation,
+  PROTO_VERSION,
+} from './types';
 
 interface MqttClient {
   publish(topic: string, message: Buffer, callback?: (err?: Error) => void): void;
   subscribe(topic: string | string[], callback?: (err: Error | null) => void): void;
   on(event: 'message', cb: (topic: string, payload: Buffer) => void): this;
 }
-import { LumiDevice, LumiFrame, LumiState, AnimationIdValue, PayloadSetAnimation } from './types';
 
 export interface LumiClientEvents {
   discovery:    (device: LumiDevice) => void;
@@ -21,23 +35,40 @@ export declare interface LumiClient {
 }
 
 export class LumiClient extends EventEmitter {
+  private seq = 0;
+  private readonly registry = new DeviceRegistry();
+  private readonly pending = new Map<string, {
+    resolve: () => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+
   constructor(
     private readonly mqtt: MqttClient,
     private readonly codec: LumiCodec,
+    private readonly ackTimeoutMs = 5000,
   ) {
     super();
+    this.on('error', () => {});
+    this.subscribeInbound();
   }
 
   setPower(deviceId: number, on: boolean): Promise<void> {
-    throw new Error('not implemented');
+    return this.sendAndAck(
+      this.makeFrame(Opcode.SET_POWER, deviceId, { state: on ? 0x01 : 0x00 }),
+    );
   }
 
   setBrightness(deviceId: number, brightness: number): Promise<void> {
-    throw new Error('not implemented');
+    return this.sendAndAck(
+      this.makeFrame(Opcode.SET_BRIGHTNESS, deviceId, { brightness }),
+    );
   }
 
   setColor(deviceId: number, color: { h: number; s: number; b: number }): Promise<void> {
-    throw new Error('not implemented');
+    return this.sendAndAck(
+      this.makeFrame(Opcode.SET_COLOR, deviceId, color),
+    );
   }
 
   setAnimation(
@@ -45,22 +76,110 @@ export class LumiClient extends EventEmitter {
     animId: AnimationIdValue,
     params: Pick<PayloadSetAnimation, 'speed' | 'intensity'>,
   ): Promise<void> {
-    throw new Error('not implemented');
+    return this.sendAndAck(
+      this.makeFrame(Opcode.SET_ANIMATION, deviceId, { animId, ...params }),
+    );
   }
 
   stopAnimation(deviceId: number): Promise<void> {
-    throw new Error('not implemented');
+    return this.sendAndAck(
+      this.makeFrame(Opcode.STOP_ANIMATION, deviceId, {}),
+    );
   }
 
   setZone(deviceId: number, zoneId: number): Promise<void> {
-    throw new Error('not implemented');
+    return this.sendAndAck(
+      this.makeFrame(Opcode.SET_ZONE, deviceId, { zoneId }),
+    );
   }
 
   getState(deviceId: number): void {
-    throw new Error('not implemented');
+    this.send(this.makeFrame(Opcode.GET_STATE, deviceId, {}));
   }
 
   send(frame: LumiFrame): void {
-    throw new Error('not implemented');
+    const buf = this.codec.encode(frame);
+    const topic = `lumi/device/${frame.deviceId}/cmd`;
+    const { deviceId, seq } = frame;
+    this.mqtt.publish(topic, buf, (err) => {
+      if (!err) return;
+      const key = `${deviceId}:${seq}`;
+      const pending = this.pending.get(key);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pending.delete(key);
+        pending.reject(err);
+      }
+    });
+  }
+
+  private makeFrame(opc: OpcodeValue, deviceId: number, payload: LumiFrame['payload']): LumiFrame {
+    return { ver: PROTO_VERSION, opc, deviceId, seq: this.nextSeq(), totalLen: 0, payload } as LumiFrame;
+  }
+
+  private sendAndAck(frame: LumiFrame): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const key = `${frame.deviceId}:${frame.seq}`;
+      const timer = setTimeout(() => {
+        this.pending.delete(key);
+        reject(new LumiTimeoutError(frame.deviceId, frame.seq));
+      }, this.ackTimeoutMs);
+      if (this.pending.has(key)) {
+        clearTimeout(timer);
+        reject(new Error(`seq collision: key ${key} already pending`));
+        return;
+      }
+      this.pending.set(key, { resolve, reject, timer });
+      this.send(frame);
+    });
+  }
+
+  private nextSeq(): number {
+    this.seq = (this.seq + 1) & 0xff;
+    return this.seq;
+  }
+
+  private subscribeInbound(): void {
+    this.mqtt.subscribe(['lumi/device/+/state', 'lumi/discovery/announce']);
+    this.mqtt.on('message', (topic, buf) => {
+      let frame: LumiFrame;
+      try {
+        frame = this.codec.decode(buf);
+      } catch {
+        return;
+      }
+      this.handleInbound(frame);
+    });
+  }
+
+  private handleInbound(frame: LumiFrame): void {
+    switch (frame.opc) {
+      case Opcode.ACK: {
+        const { ackSeq, status } = frame.payload as PayloadAck;
+        const key = `${frame.deviceId}:${ackSeq}`;
+        const pending = this.pending.get(key);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.pending.delete(key);
+          if (status === 0x00) pending.resolve();
+          else pending.reject(new Error(`ACK error for device 0x${frame.deviceId.toString(16)} seq=${ackSeq}`));
+        }
+        this.emit('ack', frame.deviceId, ackSeq, status);
+        break;
+      }
+      case Opcode.STATE_REPORT:
+        this.emit('state_report', frame.deviceId, frame.payload as LumiState);
+        break;
+      case Opcode.DISCOVERY_ANNOUNCE: {
+        const device = this.registry.upsert(frame.deviceId, frame.payload as PayloadDiscoveryAnnounce);
+        this.emit('discovery', device);
+        break;
+      }
+      case Opcode.ERROR: {
+        const { errorCode, faultyOpcode } = frame.payload as PayloadError;
+        this.emit('error', frame.deviceId, errorCode, faultyOpcode);
+        break;
+      }
+    }
   }
 }
