@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LumiClient } from '../client';
-import { LumiCodec } from '../codec';
-import { LumiTimeoutError } from '../errors';
-import { AnimationId, LumiFrame, LumiState, Opcode, PROTO_VERSION } from '../types';
+import { LumiClient } from './client';
+import { LumiCodec } from './codec';
+import { LumiTimeoutError } from './errors';
+import { AnimationId, LumiFrame, LumiState, Opcode, PROTO_VERSION } from './types';
 
 // --- mock MqttClient factory ---
 

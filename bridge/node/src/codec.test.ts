@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { LumiCodec } from '../codec';
-import { LumiDecodeError } from '../errors';
+import { LumiCodec } from './codec';
+import { LumiDecodeError } from './errors';
 import {
   AnimationId,
   LumiFrame,
   Opcode,
   PROTO_VERSION,
-} from '../types';
+} from './types';
 
 const codec = new LumiCodec();
 
