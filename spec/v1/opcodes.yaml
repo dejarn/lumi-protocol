@@ -1,0 +1,267 @@
+# lumi-protocol opcodes — v1
+# Source of truth for opcode values, names, directions, and payload schemas.
+# Rule: entries are NEVER modified or removed. New opcodes are appended.
+
+version: 1
+
+opcodes:
+
+  # ─── Commands (Raspberry Pi → ESP32) ─────────────────────────────────────
+
+  - opcode: 0x01
+    name: SET_POWER
+    direction: cmd
+    ack: true
+    description: Turn device on or off.
+    payload:
+      - field: STATE
+        size: 1
+        type: uint8
+        values:
+          0x00: "off"
+          0x01: "on"
+
+  - opcode: 0x02
+    name: SET_BRIGHTNESS
+    direction: cmd
+    ack: true
+    description: Set LED strip brightness.
+    payload:
+      - field: BRIGHTNESS
+        size: 1
+        type: uint8
+        range: [0, 255]
+        note: "Master dimmer applied on top of color: LED = color(H,S,B) * BRIGHTNESS/255. 0 = minimum, 255 = maximum."
+
+  - opcode: 0x03
+    name: SET_COLOR
+    direction: cmd
+    ack: true
+    description: Set LED strip color using HSB color model.
+    payload:
+      - field: H
+        size: 2
+        type: uint16_be
+        range: [0, 65535]
+        note: "Maps to 0°–360°. Big-endian."
+      - field: S
+        size: 1
+        type: uint8
+        range: [0, 255]
+        note: "Saturation. 0 = white, 255 = full color."
+      - field: B
+        size: 1
+        type: uint8
+        range: [0, 255]
+        note: "Brightness component of the HSB color (defines the color, not the global level). See SET_BRIGHTNESS for the master dimmer. 0 = off, 255 = maximum."
+
+  - opcode: 0x04
+    name: SET_ANIMATION
+    direction: cmd
+    ack: true
+    description: Start a predefined animation on the device.
+    payload:
+      - field: ANIM_ID
+        size: 1
+        type: uint8
+        ref: animation_ids
+      - field: SPEED
+        size: 1
+        type: uint8
+        range: [0, 255]
+        note: "Animation period. Interpretation is animation-specific."
+      - field: INTENSITY
+        size: 1
+        type: uint8
+        range: [0, 255]
+        note: "Effect strength. Interpretation is animation-specific."
+
+  - opcode: 0x05
+    name: STOP_ANIMATION
+    direction: cmd
+    ack: true
+    description: Stop any running animation and return to last static state.
+    payload: []
+
+  - opcode: 0x06
+    name: SET_ZONE
+    direction: cmd
+    ack: true
+    description: Assign the device to a zone. Persisted to NVS. Triggers MQTT resubscription.
+    payload:
+      - field: ZONE_ID
+        size: 1
+        type: uint8
+        range: [0, 254]
+        note: "0xFF reserved."
+
+  - opcode: 0x07
+    name: GET_STATE
+    direction: cmd
+    ack: false
+    description: Request a STATE_REPORT from the device. No ACK — STATE_REPORT is the response.
+    payload: []
+
+  # ─── State (ESP32 → Raspberry Pi) ────────────────────────────────────────
+
+  - opcode: 0x20
+    name: STATE_REPORT
+    direction: state
+    ack: false
+    description: >
+      Full device state. Published after every state-changing command
+      and in response to GET_STATE.
+    payload:
+      - field: POWER
+        size: 1
+        type: uint8
+        values:
+          0x00: "off"
+          0x01: "on"
+      - field: BRIGHTNESS
+        size: 1
+        type: uint8
+        range: [0, 255]
+      - field: H
+        size: 2
+        type: uint16_be
+        range: [0, 65535]
+      - field: S
+        size: 1
+        type: uint8
+        range: [0, 255]
+      - field: B
+        size: 1
+        type: uint8
+        range: [0, 255]
+      - field: ANIM_ID
+        size: 1
+        type: uint8
+        ref: animation_ids
+        note: "0x00 if no animation running."
+
+  - opcode: 0x21
+    name: ACK
+    direction: state
+    ack: false
+    description: Acknowledgement for a received command.
+    payload:
+      - field: ACK_SEQ
+        size: 1
+        type: uint8
+        note: "SEQ value from the acknowledged command."
+      - field: STATUS
+        size: 1
+        type: uint8
+        values:
+          0x00: "success"
+          0x01: "error"
+
+  # ─── Discovery ────────────────────────────────────────────────────────────
+
+  - opcode: 0x40
+    name: DISCOVERY_REQUEST
+    direction: discovery
+    ack: false
+    description: >
+      Broadcast from Raspberry Pi. All ESP32s respond with DISCOVERY_ANNOUNCE.
+      Published to lumi/discovery/request.
+    payload: []
+
+  - opcode: 0x41
+    name: DISCOVERY_ANNOUNCE
+    direction: discovery
+    ack: false
+    description: >
+      Device self-announcement. Published at boot and in response to
+      DISCOVERY_REQUEST. Published to lumi/discovery/announce.
+    payload:
+      - field: DEVICE_TYPE
+        size: 1
+        type: uint8
+        values:
+          0x01: "led_strip_controller"
+      - field: CAPABILITIES
+        size: 1
+        type: uint8
+        note: >
+          Bitmask.
+          bit 0: color (HSB),
+          bit 1: animation,
+          bit 2: dimming.
+      - field: PROTO_VERSION
+        size: 1
+        type: uint8
+        note: "Protocol version supported by this device."
+      - field: ZONE_ID
+        size: 1
+        type: uint8
+        note: "Current zone from NVS."
+      - field: NAME_LEN
+        size: 1
+        type: uint8
+        range: [0, 32]
+      - field: NAME
+        size: variable
+        type: utf8
+        note: "Device name, not null-terminated. Length given by NAME_LEN."
+
+  # ─── Error ────────────────────────────────────────────────────────────────
+
+  - opcode: 0x50
+    name: ERROR
+    direction: state
+    ack: false
+    description: Error report from ESP32. Published to lumi/device/{device_id}/state.
+    payload:
+      - field: ERROR_CODE
+        size: 1
+        type: uint8
+        values:
+          0x01: "unknown_opcode"
+          0x02: "invalid_payload_length"
+          0x03: "crc_mismatch"
+          0x04: "version_mismatch"
+          0x05: "nvs_write_failure"
+      - field: FAULTY_OPCODE
+        size: 1
+        type: uint8
+        note: "Opcode that triggered the error. 0x00 if not applicable."
+
+# ─── Animation IDs ─────────────────────────────────────────────────────────
+
+animation_ids:
+  0x00: NONE
+  0x01: PULSE
+  0x02: BREATHE
+  0x03: FLASH
+  0x04: STROBE
+  0x05: RAINBOW
+
+# ─── MQTT Topics ───────────────────────────────────────────────────────────
+
+mqtt_topics:
+  zone_cmd:     "lumi/zone/{zone_id}/cmd"
+  device_cmd:   "lumi/device/{device_id}/cmd"
+  device_state: "lumi/device/{device_id}/state"
+  discovery_request:  "lumi/discovery/request"
+  discovery_announce: "lumi/discovery/announce"
+
+# ─── Frame Layout ──────────────────────────────────────────────────────────
+
+frame:
+  endianness: big-endian
+  crc:
+    algorithm: CRC-16/CCITT
+    initial: 0xFFFF
+    polynomial: 0x1021
+    covers: "VER through last byte of PAYLOAD"
+  header:
+    - { field: VER,        size: 1, offset: 0 }
+    - { field: OPC,        size: 1, offset: 1 }
+    - { field: DEVICE_ID,  size: 2, offset: 2 }
+    - { field: SEQ,        size: 1, offset: 4 }
+    - { field: TOTAL_LEN,  size: 2, offset: 5 }
+  header_size: 7
+  crc_size: 2
+  min_frame_size: 9
