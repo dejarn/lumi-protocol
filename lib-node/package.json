@@ -1,0 +1,19 @@
+{
+  "name": "lumi-protocol",
+  "version": "1.0.0",
+  "description": "Binary protocol library for lumi LED strip controllers (Node.js / TypeScript)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "mqtt": ">=4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "mqtt": "^5.0.0",
+    "typescript": "^5.9.3"
+  }
+}
