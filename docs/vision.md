@@ -2,7 +2,7 @@
 
 _Last updated: 2026-05-20_
 
-lumi-protocol is a lightweight binary protocol for controlling custom LED strip devices over MQTT. It defines the exact byte layout of every frame, a versioned opcode registry, MQTT topic conventions, and discovery and acknowledgement rules. Two libraries implement it: one in C++ for ESP32 (Arduino framework), one in TypeScript for the Node.js mqtt-bridge running on the Raspberry Pi.
+lumi-protocol is a lightweight binary protocol for controlling custom LED strip devices over MQTT. It defines the exact byte layout of every frame, a versioned opcode registry, MQTT topic conventions, and discovery and acknowledgement rules. Two implementations share the spec: `device/arduino` (C++ / Arduino on ESP32) and `bridge/node` (TypeScript for the mqtt-bridge on the Raspberry Pi).
 
 ## Problem
 
@@ -36,8 +36,8 @@ JSON over MQTT, while simple, is too verbose for embedded constraints and lacks 
 
 | Actor | Role |
 |---|---|
-| **Raspberry Pi (mqtt-bridge)** | Runs the TypeScript library. Sends commands, handles discovery, manages retransmission, tracks device state. Sits between the Next.js app and the ESP32 fleet. |
-| **ESP32** | Runs the C++ library. Receives commands, executes them, reports state, announces itself at boot. |
+| **Raspberry Pi (mqtt-bridge)** | Runs `bridge/node`. Sends commands, handles discovery, manages retransmission, tracks device state. Sits between the Next.js app and the ESP32 fleet. |
+| **ESP32** | Runs `device/arduino`. Receives commands, executes them, reports state, announces itself at boot. |
 | **Next.js app** | Orchestrator and UI. Communicates with the mqtt-bridge via internal HTTP; unaware of lumi-protocol internals. |
 
 ## Accepted trade-offs

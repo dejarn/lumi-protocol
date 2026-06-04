@@ -2,9 +2,9 @@
 
 _Last updated: 2026-05-20_
 
-lumi-protocol exposes two libraries: `lib-node` (TypeScript, consumed by the mqtt-bridge) and `lib-esp32` (Arduino framework, flashed on each ESP32).
+lumi-protocol exposes two implementations: `bridge/node` (TypeScript, consumed by the mqtt-bridge) and `device/arduino` (Arduino framework, flashed on each ESP32).
 
-## lib-node (TypeScript)
+## bridge/node (TypeScript)
 
 Three composable modules exported from the package root:
 
@@ -51,7 +51,7 @@ Two independent controls — changing one never alters the other:
 - `color.b` — brightness component of the HSB color (which color is shown)
 - `brightness` — master dimmer applied on top: `LED = color(h,s,b) × brightness/255`
 
-## lib-esp32 (Arduino framework)
+## device/arduino (Arduino framework)
 
 One class, standard Arduino pattern: `begin()` in `setup()`, `loop()` in `loop()`. Register one callback per opcode. The library owns MQTT, frame parsing, CRC validation, NVS reads/writes, and ACK emission. It never touches GPIO — LED driving stays in the sketch.
 
