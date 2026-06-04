@@ -2,15 +2,14 @@
 
 #include <Arduino.h>
 #include <functional>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <Preferences.h>
 
-// ── Protocol constants ────────────────────────────────────────────────────────
+#include "LumiCodec.h"
 
-constexpr uint8_t LUMI_PROTO_VERSION  = 1;
-constexpr uint8_t LUMI_HEADER_SIZE    = 7;
-constexpr uint8_t LUMI_CRC_SIZE       = 2;
-constexpr uint8_t LUMI_MIN_FRAME_SIZE = 9;
+// ── Opcodes — spec/v1/opcodes.yaml (additive only, never modify) ──────────────
 
-// Opcodes — spec/v1/opcodes.yaml (additive only, never modify)
 constexpr uint8_t LUMI_OPC_SET_POWER          = 0x01;
 constexpr uint8_t LUMI_OPC_SET_BRIGHTNESS     = 0x02;
 constexpr uint8_t LUMI_OPC_SET_COLOR          = 0x03;
@@ -32,9 +31,13 @@ constexpr uint8_t LUMI_ANIM_FLASH   = 0x03;
 constexpr uint8_t LUMI_ANIM_STROBE  = 0x04;
 constexpr uint8_t LUMI_ANIM_RAINBOW = 0x05;
 
-// CRC-16/CCITT
-constexpr uint16_t LUMI_CRC_POLY = 0x1021;
-constexpr uint16_t LUMI_CRC_INIT = 0xFFFF;
+// Device type and capability constants (DISCOVERY_ANNOUNCE payload bytes 0–1)
+constexpr uint8_t LUMI_DEVICE_TYPE_LED_STRIP = 0x01u;
+constexpr uint8_t LUMI_CAP_COLOR             = (1u << 0);
+constexpr uint8_t LUMI_CAP_ANIMATION         = (1u << 1);
+constexpr uint8_t LUMI_CAP_DIMMING           = (1u << 2);
+
+static constexpr size_t kLumiTopicLen = 48u;
 
 // ── Data types ────────────────────────────────────────────────────────────────
 
@@ -43,7 +46,7 @@ struct LumiState {
   uint8_t  brightness;  // master dimmer
   uint16_t h;           // hue, big-endian, 0–65535 → 0°–360°
   uint8_t  s;           // saturation
-  uint8_t  b;           // brightness component of HSB color
+  uint8_t  colorBri;    // HSB brightness component
   uint8_t  animId;      // 0x00 if no animation running
 };
 
@@ -62,7 +65,7 @@ class LumiProtocol {
 public:
   LumiProtocol() = default;
 
-  void begin(const char* wifiSsid, const char* wifiPass,
+  bool begin(const char* wifiSsid, const char* wifiPass,
              const char* brokerIp, const char* deviceName);
 
   void loop();
@@ -75,10 +78,51 @@ public:
   void onGetState(OnGetState cb)           { _onGetState = cb; }
 
 private:
-  OnSetPower      _onSetPower;
-  OnSetBrightness _onSetBrightness;
-  OnSetColor      _onSetColor;
-  OnSetAnimation  _onSetAnimation;
-  OnStopAnimation _onStopAnimation;
-  OnGetState      _onGetState;
+    // ── MQTT / WiFi ───────────────────────────────────────────────────────────
+    WiFiClient   _wifiClient;
+    PubSubClient _mqtt;
+
+    // ── Device identity ───────────────────────────────────────────────────────
+    uint16_t _deviceId = 0;
+    uint8_t       _zoneId          = 0;
+    uint8_t       _seq             = 0;
+    unsigned long _lastReconnectMs = 0;
+    char     _deviceName[33] = {};     // null-terminated, max 32 UTF-8 bytes
+
+    // ── Pre-built MQTT topic strings (computed once in begin()) ───────────────
+    char _topicDeviceCmd  [kLumiTopicLen] = {};  // lumi/device/{id}/cmd
+    char _topicDeviceState[kLumiTopicLen] = {};  // lumi/device/{id}/state
+    char _topicZoneCmd    [kLumiTopicLen] = {};  // lumi/zone/{zone}/cmd
+
+    // ── Shared transmit buffer — reused for every outbound frame ─────────────
+    uint8_t _txBuf[kLumiMaxFrameLen] = {};
+
+    // ── Singleton trampoline for PubSubClient static callback ────────────────
+    // PubSubClient callback has no user-data pointer; we need a static ptr.
+    static LumiProtocol* _instance;
+
+    // ── Outbound helpers ──────────────────────────────────────────────────────
+    void _sendAck(uint8_t seq, uint8_t status);
+    void _sendStateReport(const LumiState& state);
+    void _sendDiscoveryAnnounce();
+    void _sendError(uint8_t errorCode, uint8_t faultyOpc);
+
+    // ── MQTT dispatch ─────────────────────────────────────────────────────────
+    // Static trampoline — routes to _instance->_onMqttMessage.
+    static void _mqttCallback(char* topic, uint8_t* payload, unsigned int len);
+    void _onMqttMessage(const char* topic, const uint8_t* buf, size_t len);
+    void _dispatchOpcode(const LumiParsedFrame& f);
+
+    // ── Zone management ───────────────────────────────────────────────────────
+    void _subscribeZone(uint8_t zoneId);
+    void _unsubscribeZone(uint8_t zoneId);
+    bool _reconnectMqtt();
+
+    // ── User callbacks ────────────────────────────────────────────────────────
+    OnSetPower      _onSetPower;
+    OnSetBrightness _onSetBrightness;
+    OnSetColor      _onSetColor;
+    OnSetAnimation  _onSetAnimation;
+    OnStopAnimation _onStopAnimation;
+    OnGetState      _onGetState;
 };
