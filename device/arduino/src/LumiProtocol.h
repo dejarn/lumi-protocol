@@ -66,7 +66,8 @@ public:
   LumiProtocol() = default;
 
   bool begin(const char* wifiSsid, const char* wifiPass,
-             const char* brokerIp, const char* deviceName);
+             const char* brokerIp, const char* deviceName,
+             uint16_t brokerPort = 1883);
 
   void loop();
 
@@ -86,6 +87,7 @@ private:
     uint16_t _deviceId = 0;
     uint8_t       _zoneId          = 0;
     uint8_t       _seq             = 0;
+    uint16_t      _brokerPort      = 1883;
     unsigned long _lastReconnectMs = 0;
     char     _deviceName[33] = {};     // null-terminated, max 32 UTF-8 bytes
 

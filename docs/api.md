@@ -61,7 +61,8 @@ One class, standard Arduino pattern: `begin()` in `setup()`, `loop()` in `loop()
 LumiProtocol lumi;
 
 void setup() {
-  lumi.begin(WIFI_SSID, WIFI_PASS, BROKER_IP, "salon-strip-1");
+  lumi.begin(WIFI_SSID, WIFI_PASS, BROKER_IP, "salon-strip-1");  // port defaults to 1883
+  // lumi.begin(WIFI_SSID, WIFI_PASS, BROKER_IP, "salon-strip-1", 8883); // custom port
 
   lumi.onSetPower([](bool on)                                       { /* drive GPIO */ });
   lumi.onSetBrightness([](uint8_t brightness)                       { /* drive GPIO */ });
@@ -78,3 +79,7 @@ void loop() {
 ```
 
 `SET_ZONE` is handled entirely by the library (NVS write + MQTT resubscription). No callback needed.
+
+### STATE_REPORT and animation parameters
+
+`STATE_REPORT` (0x20) reports `animId` but not the `speed` and `intensity` values that were passed to `SET_ANIMATION`. This is a deliberate v1 constraint: the bridge owns those values when it issues the command and should persist them server-side (e.g. in its device database). Extending `STATE_REPORT` to carry `speed`/`intensity` would require a protocol version bump and is deferred to a future spec version.

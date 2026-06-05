@@ -97,7 +97,8 @@ bool LumiProtocol::_reconnectMqtt() {
 }
 
 bool LumiProtocol::begin(const char* wifiSsid, const char* wifiPass,
-                         const char* brokerIp, const char* deviceName) {
+                         const char* brokerIp, const char* deviceName,
+                         uint16_t brokerPort) {
     _instance = this;
 
     strncpy(_deviceName, deviceName, sizeof(_deviceName) - 1u);
@@ -124,8 +125,9 @@ bool LumiProtocol::begin(const char* wifiSsid, const char* wifiPass,
         prefs.end();
     }
 
+    _brokerPort = brokerPort;
     _mqtt.setClient(_wifiClient);
-    _mqtt.setServer(brokerIp, 1883);
+    _mqtt.setServer(brokerIp, _brokerPort);
     _mqtt.setCallback(_mqttCallback);
 
     return _reconnectMqtt();

@@ -106,7 +106,7 @@ lib_extra_dirs =
     vendor/lumi-protocol/device
 ```
 
-PlatformIO discovers the `arduino/` folder as the `LumiProtocol` library. `PubSubClient` is a required dependency (declared in [`device/arduino/library.properties`](../device/arduino/library.properties)).
+PlatformIO discovers `arduino/` as the `LumiProtocol` library. `LumiCodec` is a private codec dependency declared in `arduino/library.json` — its source is compiled automatically alongside `LumiProtocol` with no extra steps. `PubSubClient` is a required dependency (declared in `arduino/library.json`).
 
 ### Local development alternative
 
@@ -130,7 +130,8 @@ See [`device/arduino/examples/basic/basic.ino`](../device/arduino/examples/basic
 LumiProtocol lumi;
 
 void setup() {
-  lumi.begin("MY_SSID", "MY_PASS", "192.168.1.10", "living-room-strip");
+  lumi.begin("MY_SSID", "MY_PASS", "192.168.1.10", "living-room-strip");        // port 1883 (default)
+  // lumi.begin("MY_SSID", "MY_PASS", "192.168.1.10", "living-room-strip", 8883); // custom port
 
   lumi.onSetPower([](bool on) { /* drive GPIO */ });
   lumi.onSetColor([](uint16_t h, uint8_t s, uint8_t b) { /* drive GPIO */ });

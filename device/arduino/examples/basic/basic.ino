@@ -1,13 +1,14 @@
 #include <LumiProtocol.h>
 
-#define WIFI_SSID   "your-ssid"
-#define WIFI_PASS   "your-password"
-#define BROKER_IP   "192.168.1.1"
+#define WIFI_SSID    "your-ssid"
+#define WIFI_PASS    "your-password"
+#define BROKER_IP    "192.168.1.1"
+#define BROKER_PORT  1883  // default; change if your broker uses a non-standard port
 
 LumiProtocol lumi;
 
 void setup() {
-  lumi.begin(WIFI_SSID, WIFI_PASS, BROKER_IP, "salon-strip-1");
+  lumi.begin(WIFI_SSID, WIFI_PASS, BROKER_IP, "salon-strip-1", BROKER_PORT);
 
   lumi.onSetPower([](bool on) {
     // drive GPIO
