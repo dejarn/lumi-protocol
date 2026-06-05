@@ -18,8 +18,8 @@ function makeMqtt() {
       return mock;
     }),
     /** Simulate an inbound MQTT message (device → bridge) */
-    receive(buf: Buffer) {
-      messageHandler?.('', buf);
+    receive(topic: string, buf: Buffer) {
+      messageHandler?.(topic, buf);
     },
   };
   return mock;
@@ -50,8 +50,12 @@ function sendAck(
   seq: number,
   status: 0x00 | 0x01 = 0x00,
 ) {
-  mqtt.receive(deviceFrame(Opcode.ACK, { ackSeq: seq, status }, seq));
+  mqtt.receive(`lumi/device/${DEVICE_ID.toString(16).padStart(4, '0')}/state`,
+    deviceFrame(Opcode.ACK, { ackSeq: seq, status }, seq));
 }
+
+const AVAIL_TOPIC = `lumi/device/${DEVICE_ID.toString(16).padStart(4, '0')}/availability`;
+const STATE_TOPIC = `lumi/device/${DEVICE_ID.toString(16).padStart(4, '0')}/state`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -221,7 +225,7 @@ describe('LumiClient — inbound event handling', () => {
     const handler = vi.fn();
     client.on('state_report', handler);
     const state: LumiState = { power: 0x01, brightness: 180, h: 200, s: 128, b: 90, animId: AnimationId.NONE };
-    mqtt.receive(deviceFrame(Opcode.STATE_REPORT, state));
+    mqtt.receive(STATE_TOPIC, deviceFrame(Opcode.STATE_REPORT, state));
     expect(handler).toHaveBeenCalledWith(DEVICE_ID, state);
   });
 
@@ -229,7 +233,7 @@ describe('LumiClient — inbound event handling', () => {
     const handler = vi.fn();
     client.on('discovery', handler);
     const announce = { deviceType: 1, capabilities: 0xff, protoVersion: 1, zoneId: 0, name: 'strip-1' };
-    mqtt.receive(deviceFrame(Opcode.DISCOVERY_ANNOUNCE, announce));
+    mqtt.receive('lumi/discovery/announce', deviceFrame(Opcode.DISCOVERY_ANNOUNCE, announce));
     expect(handler).toHaveBeenCalledOnce();
     const device = handler.mock.calls[0][0];
     expect(device.deviceId).toBe(DEVICE_ID);
@@ -239,11 +243,61 @@ describe('LumiClient — inbound event handling', () => {
   it('ERROR opcode inbound emits error event with correct args', () => {
     const handler = vi.fn();
     client.on('error', handler);
-    mqtt.receive(deviceFrame(Opcode.ERROR, { errorCode: 5, faultyOpcode: 0x02 }));
+    mqtt.receive(STATE_TOPIC, deviceFrame(Opcode.ERROR, { errorCode: 5, faultyOpcode: 0x02 }));
     expect(handler).toHaveBeenCalledWith(DEVICE_ID, 5, 0x02);
   });
 
   it('malformed inbound frame is silently dropped (no throw)', () => {
-    expect(() => mqtt.receive(Buffer.alloc(3))).not.toThrow();
+    expect(() => mqtt.receive(STATE_TOPIC, Buffer.alloc(3))).not.toThrow();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('LumiClient — availability (LWT)', () => {
+  let mqtt: ReturnType<typeof makeMqtt>;
+  let client: LumiClient;
+
+  beforeEach(() => {
+    mqtt = makeMqtt();
+    client = makeClient(mqtt);
+  });
+
+  it('subscribes to lumi/device/+/availability', () => {
+    expect(mqtt.subscribe).toHaveBeenCalledWith([
+      'lumi/device/+/state',
+      'lumi/device/+/availability',
+      'lumi/discovery/announce',
+    ]);
+  });
+
+  it('emits availability(true) on payload "online"', () => {
+    const handler = vi.fn();
+    client.on('availability', handler);
+    mqtt.receive(AVAIL_TOPIC, Buffer.from('online'));
+    expect(handler).toHaveBeenCalledWith(DEVICE_ID, true);
+  });
+
+  it('emits availability(false) on payload "offline"', () => {
+    const handler = vi.fn();
+    client.on('availability', handler);
+    mqtt.receive(AVAIL_TOPIC, Buffer.from('offline'));
+    expect(handler).toHaveBeenCalledWith(DEVICE_ID, false);
+  });
+
+  it('treats non-"online" payload as offline', () => {
+    const handler = vi.fn();
+    client.on('availability', handler);
+    mqtt.receive(AVAIL_TOPIC, Buffer.from('ONLINE'));
+    expect(handler).toHaveBeenCalledWith(DEVICE_ID, false);
+  });
+
+  it('discovery after offline availability sets reachable=false', () => {
+    mqtt.receive(AVAIL_TOPIC, Buffer.from('offline'));
+    const handler = vi.fn();
+    client.on('discovery', handler);
+    const announce = { deviceType: 1, capabilities: 0xff, protoVersion: 1, zoneId: 0, name: 'strip-1' };
+    mqtt.receive('lumi/discovery/announce', deviceFrame(Opcode.DISCOVERY_ANNOUNCE, announce));
+    expect(handler.mock.calls[0][0].reachable).toBe(false);
   });
 });

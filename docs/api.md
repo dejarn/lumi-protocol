@@ -1,6 +1,6 @@
 # API Design
 
-_Last updated: 2026-05-20_
+_Last updated: 2026-06-05_
 
 For installation in external projects, see [consumption.md](consumption.md).
 
@@ -16,9 +16,9 @@ import { LumiCodec, LumiClient, DeviceRegistry } from 'lumi-protocol'
 
 **`LumiCodec`** — stateless encode/decode. No MQTT, no I/O. Testable in isolation. Throws `LumiDecodeError` on invalid buffer, bad CRC, or unsupported version.
 
-**`LumiClient`** — receives an existing `mqtt.js` client (no second broker connection). Extends `EventEmitter` with typed events. High-level command methods return a `Promise` that resolves on ACK, plus a `send()` escape hatch for future opcodes.
+**`LumiClient`** — receives an existing `mqtt.js` client (no second broker connection). Extends `EventEmitter` with typed events: `discovery`, `availability`, `state_report`, `ack`, `error`. High-level command methods return a `Promise` that resolves on ACK, plus a `send()` escape hatch for future opcodes.
 
-**`DeviceRegistry`** — in-memory device catalogue. mqtt-bridge populates it from PostgreSQL at startup and delegates persistence to the database.
+**`DeviceRegistry`** — in-memory device catalogue. mqtt-bridge populates it from PostgreSQL at startup and delegates persistence to the database. `setReachable` / `markUnreachable` update reachability; `setReachable` buffers state for devices not yet discovered.
 
 ### Wiring (mqtt-bridge usage)
 
@@ -29,8 +29,18 @@ const client     = new LumiClient(mqttClient, codec)
 const registry   = new DeviceRegistry()
 
 client.on('discovery', (device) => {
-  registry.upsert(device)
+  registry.upsert(device.deviceId, {
+    deviceType: device.deviceType,
+    capabilities: device.capabilities,
+    protoVersion: device.protoVersion,
+    zoneId: device.zoneId,
+    name: device.name,
+  })
   db.upsertDevice(device)
+})
+
+client.on('availability', (deviceId, online) => {
+  registry.setReachable(deviceId, online)
 })
 
 client.on('state_report', (deviceId, state) => {
@@ -44,7 +54,9 @@ await client.setAnimation('a3f1', 'BREATHE', { speed: 128, intensity: 200 })
 
 ### ACK behaviour
 
-State-mutating commands wait for an `ACK` frame matching the sent `SEQ`. Timeout: 2 s, 3 retries. After 3 failures the `Promise` rejects with `LumiTimeoutError` and the device is marked unreachable in the registry.
+State-mutating commands wait for an `ACK` frame matching the sent `SEQ`. On timeout (5 s default), the `Promise` rejects with `LumiTimeoutError`. A timeout does not update reachability — an ACK failure can mean a busy device, not an offline one.
+
+Primary reachability comes from the retained `lumi/device/{id}/availability` topic (MQTT Last Will). `LumiClient` subscribes automatically and emits `availability(deviceId, online)`. Wire `registry.setReachable` in that handler. See the [protocol spec](../spec/v1/protocol.md#device-availability-lwt).
 
 ### Brightness model
 

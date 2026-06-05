@@ -5,6 +5,16 @@ Format: [SemVer](https://semver.org) — protocol version maps to `VER` byte in 
 
 ---
 
+## [1.1.0] — 2026-06-05
+
+Transport-only additions. **No frame change** — the `VER` byte stays `0x01`; existing devices and parsers are unaffected.
+
+### Transport
+- Added device availability via MQTT Last Will & Testament on `lumi/device/{device_id}/availability` — retained string `"online"`/`"offline"`. Plain payload, outside the binary framing (no opcode).
+- `STATE_REPORT` is now published **retained** on `lumi/device/{device_id}/state` so late subscribers get the last known state immediately.
+
+---
+
 ## [1.0.0] — 2026-05-20
 
 Initial specification.

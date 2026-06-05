@@ -24,6 +24,7 @@ interface MqttClient {
 
 export interface LumiClientEvents {
   discovery:    (device: LumiDevice) => void;
+  availability: (deviceId: number, online: boolean) => void;
   state_report: (deviceId: number, state: LumiState) => void;
   ack:          (deviceId: number, ackSeq: number, status: 0x00 | 0x01) => void;
   error:        (deviceId: number, errorCode: number, faultyOpcode: number) => void;
@@ -140,8 +141,17 @@ export class LumiClient extends EventEmitter {
   }
 
   private subscribeInbound(): void {
-    this.mqtt.subscribe(['lumi/device/+/state', 'lumi/discovery/announce']);
+    this.mqtt.subscribe(['lumi/device/+/state', 'lumi/device/+/availability', 'lumi/discovery/announce']);
     this.mqtt.on('message', (topic, buf) => {
+      const availMatch = /^lumi\/device\/([0-9a-f]{4})\/availability$/i.exec(topic);
+      if (availMatch) {
+        const deviceId = parseInt(availMatch[1], 16);
+        const online = buf.toString() === 'online';
+        this.registry.setReachable(deviceId, online);
+        this.emit('availability', deviceId, online);
+        return;
+      }
+
       let frame: LumiFrame;
       try {
         frame = this.codec.decode(buf);

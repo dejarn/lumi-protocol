@@ -27,7 +27,7 @@ void LumiProtocol::_sendStateReport(const LumiState& state) {
     const size_t len = lumiBuildFrame(LUMI_PROTO_VERSION, LUMI_OPC_STATE_REPORT, _deviceId, _seq,
                                       payload, sizeof(payload), _txBuf, sizeof(_txBuf));
     if (len > 0) {
-        _mqtt.publish(_topicDeviceState, _txBuf, static_cast<unsigned int>(len));
+        _mqtt.publish(_topicDeviceState, _txBuf, static_cast<unsigned int>(len), true);
     }
 }
 
@@ -86,7 +86,9 @@ bool LumiProtocol::_reconnectMqtt() {
     char clientId[16];
     snprintf(clientId, sizeof(clientId), "lumi-%04x", _deviceId);
 
-    if (!_mqtt.connect(clientId)) return false;
+    if (!_mqtt.connect(clientId, _topicAvailability, 0, true, "offline")) return false;
+
+    _mqtt.publish(_topicAvailability, "online", true);
 
     _mqtt.subscribe(_topicDeviceCmd);
     _subscribeZone(_zoneId);
@@ -115,8 +117,9 @@ bool LumiProtocol::begin(const char* wifiSsid, const char* wifiPass,
     WiFi.macAddress(mac);
     _deviceId = (static_cast<uint16_t>(mac[4]) << 8) | mac[5];
 
-    snprintf(_topicDeviceCmd,   kLumiTopicLen, "lumi/device/%04x/cmd",   _deviceId);
-    snprintf(_topicDeviceState, kLumiTopicLen, "lumi/device/%04x/state", _deviceId);
+    snprintf(_topicDeviceCmd,    kLumiTopicLen, "lumi/device/%04x/cmd",          _deviceId);
+    snprintf(_topicDeviceState,  kLumiTopicLen, "lumi/device/%04x/state",        _deviceId);
+    snprintf(_topicAvailability, kLumiTopicLen, "lumi/device/%04x/availability", _deviceId);
 
     {
         Preferences prefs;

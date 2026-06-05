@@ -64,7 +64,8 @@ MQTT topics handle all routing. The frame payload does not embed destination add
 ```
 lumi/zone/{zone_id}/cmd          →  Raspberry Pi → all ESP32s in a zone
 lumi/device/{device_id}/cmd      →  Raspberry Pi → specific ESP32 (hex, e.g. "a3f1")
-lumi/device/{device_id}/state    →  ESP32 → Raspberry Pi (STATE_REPORT, ACK, ERROR)
+lumi/device/{device_id}/state    →  ESP32 → Raspberry Pi (STATE_REPORT retained; ACK/ERROR non-retained)
+lumi/device/{device_id}/availability →  ESP32 presence (LWT): "online"/"offline", retained
 lumi/discovery/request           →  Raspberry Pi → all ESP32s (broadcast)
 lumi/discovery/announce          →  ESP32 → Raspberry Pi
 ```
@@ -80,6 +81,24 @@ Each ESP32 subscribes to:
 3. `lumi/discovery/request`
 
 When `SET_ZONE` is received, the ESP32 unsubscribes from the old zone topic and resubscribes to the new one.
+
+### Device Availability (LWT)
+
+Device presence is signalled on a dedicated topic, separate from the binary frame protocol:
+
+```
+lumi/device/{device_id}/availability   →  "online" | "offline"  (retained)
+```
+
+- **On connect**, the ESP32 registers an MQTT Last Will & Testament with the broker: topic `lumi/device/{device_id}/availability`, payload `offline`, **retained**, QoS 0.
+- Immediately **after a successful connection**, the ESP32 publishes `online` (retained) on the same topic.
+- On **disconnect** (Wi-Fi loss, power cut, crash, broker timeout), the broker publishes the registered `offline` will automatically once the keepalive interval expires — the device does nothing.
+
+`availability` is a **plain string payload**, outside the binary framing: it carries no `VER`/`OPC`/`DEVICE_ID`/`CRC` and consumes no opcode. The Raspberry Pi subscribes to `lumi/device/+/availability` to track reachability without polling.
+
+> Because the topic is **retained**, any client (including a third-party monitor) that subscribes later immediately receives the device's last known availability instead of waiting for the next change.
+
+> Implementation note: with PubSubClient this is `_mqtt.connect(clientId, willTopic, 0, true, "offline")` in `LumiProtocol::_reconnectMqtt()` (`device/arduino/src/LumiProtocol.cpp`), followed by a retained publish of `online`.
 
 ## Payloads
 
@@ -137,7 +156,7 @@ Requests a `STATE_REPORT` from the device. No ACK — the `STATE_REPORT` is the 
 ```
 [POWER:1][BRIGHTNESS:1][H:2][S:1][B:1][ANIM_ID:1]
 ```
-Published to `lumi/device/{device_id}/state` after every executed state-changing command, and in response to `GET_STATE`.
+Published **retained** to `lumi/device/{device_id}/state` after every executed state-changing command, and in response to `GET_STATE`. Only `STATE_REPORT` uses the MQTT retain flag on this topic — `ACK` and `ERROR` frames on the same topic are published non-retained. Retained so a client subscribing later immediately receives the device's last known state without waiting for the next change.
 
 | Field | Size | Description |
 |---|---|---|

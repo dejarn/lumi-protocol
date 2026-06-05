@@ -57,7 +57,17 @@ const client     = new LumiClient(mqttClient, codec)
 const registry   = new DeviceRegistry()
 
 client.on('discovery', (device) => {
-  registry.upsert(device.deviceId, device)
+  registry.upsert(device.deviceId, {
+    deviceType: device.deviceType,
+    capabilities: device.capabilities,
+    protoVersion: device.protoVersion,
+    zoneId: device.zoneId,
+    name: device.name,
+  })
+})
+
+client.on('availability', (deviceId, online) => {
+  registry.setReachable(deviceId, online)
 })
 
 client.on('state_report', (deviceId, state) => {

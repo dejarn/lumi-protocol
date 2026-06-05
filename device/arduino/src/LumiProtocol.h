@@ -92,9 +92,10 @@ private:
     char     _deviceName[33] = {};     // null-terminated, max 32 UTF-8 bytes
 
     // ── Pre-built MQTT topic strings (computed once in begin()) ───────────────
-    char _topicDeviceCmd  [kLumiTopicLen] = {};  // lumi/device/{id}/cmd
-    char _topicDeviceState[kLumiTopicLen] = {};  // lumi/device/{id}/state
-    char _topicZoneCmd    [kLumiTopicLen] = {};  // lumi/zone/{zone}/cmd
+    char _topicDeviceCmd      [kLumiTopicLen] = {};  // lumi/device/{id}/cmd
+    char _topicDeviceState    [kLumiTopicLen] = {};  // lumi/device/{id}/state
+    char _topicZoneCmd        [kLumiTopicLen] = {};  // lumi/zone/{zone}/cmd
+    char _topicAvailability   [kLumiTopicLen] = {};  // lumi/device/{id}/availability (LWT)
 
     // ── Shared transmit buffer — reused for every outbound frame ─────────────
     uint8_t _txBuf[kLumiMaxFrameLen] = {};
