@@ -15,6 +15,8 @@ lumi-protocol is a monorepo. Each consumer project points at the relevant subdir
 
 Both libraries share the same spec in [`spec/v1/`](../spec/v1/). Pin versions with git tags on this repo (e.g. `v1.0.0`) to keep bridge and firmware aligned.
 
+Node.js installs only `bridge/node/` via the `:bridge/node` suffix in `package.json`. For firmware, use a sparse git submodule to checkout only `device/arduino/` — you do not need the rest of the monorepo on disk.
+
 ## Node.js — mqtt-bridge
 
 ### Install
@@ -91,17 +93,46 @@ Or bump the tag in `package.json` and run `pnpm install`.
 
 ## Arduino — ESP32 firmware (PlatformIO)
 
-### Install (recommended: git submodule)
+Only `device/arduino/` is needed at build time (it bundles `lib/LumiCodec/`). Unlike npm, PlatformIO has no `:device/arduino` subdirectory syntax — a bare GitHub URL in `lib_deps` does **not** work because PlatformIO expects `library.properties` at the repo root.
 
-A bare GitHub URL in `lib_deps` does **not** work — PlatformIO expects `library.properties` at the repo root, but this library lives in `device/arduino/`.
+Use a **git submodule with sparse checkout** to pull just `device/arduino/`, mirroring what `:bridge/node` does for Node.js.
 
-Add the repo as a submodule in your firmware project:
+### Install (recommended: sparse submodule)
+
+**1. Add the submodule** in your firmware project:
 
 ```bash
 git submodule add https://github.com/dejarn/lumi-protocol.git vendor/lumi-protocol
 ```
 
-Then in `platformio.ini`:
+**2. Limit checkout to the Arduino library** — pick one method:
+
+**Persistent (Git ≥ 2.42)** — add `sparseCheckout` to `.gitmodules` in your firmware repo:
+
+```ini
+[submodule "vendor/lumi-protocol"]
+    path = vendor/lumi-protocol
+    url = https://github.com/dejarn/lumi-protocol.git
+    sparseCheckout = device/arduino
+```
+
+Then re-initialize so collaborators and CI get the sparse tree automatically:
+
+```bash
+git submodule deinit -f vendor/lumi-protocol
+git submodule update --init vendor/lumi-protocol
+```
+
+**One-time (any Git version)** — run inside the submodule after adding it:
+
+```bash
+cd vendor/lumi-protocol
+git sparse-checkout init --cone
+git sparse-checkout set device/arduino
+cd ../..
+```
+
+**3. Wire PlatformIO** in `platformio.ini`:
 
 ```ini
 [env:esp32dev]
@@ -116,7 +147,20 @@ lib_extra_dirs =
     vendor/lumi-protocol/device
 ```
 
-PlatformIO discovers `arduino/` as the `LumiProtocol` library. `LumiCodec` is a private codec dependency declared in `arduino/library.json` — its source is compiled automatically alongside `LumiProtocol` with no extra steps. `PubSubClient` is a required dependency (declared in `arduino/library.json`).
+PlatformIO discovers `arduino/` as the `LumiProtocol` library. `LumiCodec` is compiled automatically alongside `LumiProtocol` (declared in `arduino/library.json`). `PubSubClient` is a required external dependency.
+
+### Migrate an existing full submodule
+
+If you already have the entire monorepo checked out under `vendor/lumi-protocol`:
+
+```bash
+cd vendor/lumi-protocol
+git sparse-checkout init --cone
+git sparse-checkout set device/arduino
+cd ../..
+```
+
+Add `sparseCheckout = device/arduino` to `.gitmodules` (Git ≥ 2.42) so future clones stay sparse. Commit both `.gitmodules` and the submodule pointer.
 
 ### Local development alternative
 
@@ -128,7 +172,7 @@ lib_deps =
     file://../../lumi-protocol/device/arduino
 ```
 
-This path is not portable across machines or CI — prefer the submodule approach for anything shared.
+This path is not portable across machines or CI — prefer the sparse submodule approach for anything shared.
 
 ### Wire up
 
@@ -193,7 +237,8 @@ Tag releases on this repo after spec changes. Both consumer projects should refe
 
 ### ESP32 firmware
 
-- [ ] Add `lumi-protocol` as a git submodule
+- [ ] Add `lumi-protocol` as a git submodule with sparse checkout (`device/arduino` only)
+- [ ] Set `sparseCheckout = device/arduino` in `.gitmodules` (Git ≥ 2.42)
 - [ ] Set `lib_extra_dirs = vendor/lumi-protocol/device` in `platformio.ini`
 - [ ] Add `PubSubClient` to `lib_deps`
 - [ ] Register GPIO callbacks in `setup()`, call `lumi.loop()` in `loop()`

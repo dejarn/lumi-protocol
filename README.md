@@ -24,7 +24,7 @@ Libraries are consumed from this GitHub repo — there is no public npm or Platf
 | Target | Install (short) |
 |--------|-----------------|
 | mqtt-bridge (Node.js) | `pnpm add github:dejarn/lumi-protocol#main:bridge/node` |
-| ESP32 firmware (PlatformIO) | git submodule + `lib_extra_dirs = vendor/lumi-protocol/device` |
+| ESP32 firmware (PlatformIO) | sparse git submodule (`device/arduino` only) + `lib_extra_dirs` |
 
 ## Protocol
 
@@ -124,6 +124,8 @@ See [`docs/api.md`](docs/api.md) for the full API reference (`LumiClient`, `Lumi
 git submodule add https://github.com/dejarn/lumi-protocol.git vendor/lumi-protocol
 ```
 
+In `.gitmodules`, add `sparseCheckout = device/arduino` under the submodule entry (Git ≥ 2.42) so only the Arduino library is checked out — not the full monorepo.
+
 ```ini
 lib_deps =
     knolleary/PubSubClient @ ^2.8
@@ -131,7 +133,7 @@ lib_extra_dirs =
     vendor/lumi-protocol/device
 ```
 
-See [`docs/consumption.md`](docs/consumption.md) for why a bare GitHub URL in `lib_deps` does not work and for local dev alternatives.
+See [`docs/consumption.md`](docs/consumption.md) for sparse-checkout setup, migration from a full submodule, and local dev alternatives.
 
 ### Usage
 
