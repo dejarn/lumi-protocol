@@ -197,10 +197,17 @@ pnpm test:watch    # watch mode
 pnpm build         # tsc → dist/
 pnpm typecheck     # type-check without emit
 
-# Arduino library (PlatformIO)
-pio test -e native-test   # googletest native suite
-pio run                   # build for ESP32
+# Arduino library — native tests (from repo root, Windows via WSL)
+wsl -e bash -lc "cd device/arduino && pio test -e native-test"
+
+# Arduino library — native tests (Linux / macOS, or inside WSL)
+cd device/arduino && pio test -e native-test
+
+pio run                   # build for ESP32 (from device/arduino/)
 pio run -t upload         # flash to connected ESP32
 ```
+
+> [!NOTE]
+> **Arduino tests need a host C++ compiler (`g++`).** On Windows, run via WSL (command above). `pio test` from PowerShell alone fails without MinGW.
 
 The spec in [`spec/v1/`](spec/v1/) is the source of truth for both libraries. When adding features, update the spec first — see the [adding an opcode](CLAUDE.md) workflow.
