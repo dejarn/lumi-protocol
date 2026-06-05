@@ -2,6 +2,8 @@
 
 _Last updated: 2026-05-20_
 
+For installation in external projects, see [consumption.md](consumption.md).
+
 lumi-protocol provides implementations for each target platform. Current implementations: `bridge/node` (TypeScript, consumed by the mqtt-bridge) and `device/arduino` (Arduino framework, flashed on IoT devices).
 
 ## bridge/node (TypeScript)

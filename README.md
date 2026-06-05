@@ -17,6 +17,15 @@ Next.js UI / Automations
  lumi-protocol [Arduino / …]
 ```
 
+## Using in your projects
+
+Libraries are consumed from this GitHub repo — there is no public npm or PlatformIO registry publish. See [`docs/consumption.md`](docs/consumption.md) for full install steps, versioning, and checklists.
+
+| Target | Install (short) |
+|--------|-----------------|
+| mqtt-bridge (Node.js) | `pnpm add github:dejarn/lumi-protocol#main:bridge/node` |
+| ESP32 firmware (PlatformIO) | git submodule + `lib_extra_dirs = vendor/lumi-protocol/device` |
+
 ## Protocol
 
 ### Frame layout
@@ -64,8 +73,11 @@ See [`spec/v1/opcodes.yaml`](spec/v1/opcodes.yaml) for the full payload schemas.
 ### Installation
 
 ```bash
-pnpm add lumi-protocol
+pnpm add github:dejarn/lumi-protocol#main:bridge/node
+pnpm add mqtt
 ```
+
+See [`docs/consumption.md`](docs/consumption.md) for tag pinning and mqtt-bridge wiring.
 
 ### Usage
 
@@ -102,49 +114,24 @@ client.getState(0xa3f1)
 
 ### API
 
-**`LumiClient`**
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `setPower(deviceId, on)` | `Promise<void>` | Turn device on/off |
-| `setBrightness(deviceId, value)` | `Promise<void>` | Set master dimmer (0–255) |
-| `setColor(deviceId, {h, s, b})` | `Promise<void>` | Set HSB color (h: 0–65535, s/b: 0–255) |
-| `setAnimation(deviceId, animId, {speed, intensity})` | `Promise<void>` | Start animation |
-| `stopAnimation(deviceId)` | `Promise<void>` | Stop animation, restore static state |
-| `setZone(deviceId, zoneId)` | `Promise<void>` | Assign to zone (persisted on device) |
-| `getState(deviceId)` | `void` | Request STATE_REPORT (listen for `state_report` event) |
-| `send(frame)` | `void` | Send raw frame |
-
-**Events:** `discovery(device)` · `state_report(deviceId, state)` · `ack(deviceId, seq, status)` · `error(deviceId, errorCode, faultyOpcode)`
-
-**`LumiCodec`** — stateless encode/decode, usable without MQTT.
-
-```typescript
-const codec = new LumiCodec()
-const buf = codec.encode(frame)      // Buffer
-const frame = codec.decode(buf)      // LumiFrame — throws LumiDecodeError on bad CRC / version
-```
-
-**`DeviceRegistry`** — in-memory device catalogue.
-
-```typescript
-const registry = new DeviceRegistry()
-client.on('discovery', (device) => registry.upsert(device.deviceId, device))
-registry.list()                      // LumiDevice[]
-registry.get(0xa3f1)                 // LumiDevice | undefined
-registry.markUnreachable(0xa3f1)
-```
+See [`docs/api.md`](docs/api.md) for the full API reference (`LumiClient`, `LumiCodec`, `DeviceRegistry`, events, ACK behaviour).
 
 ## Arduino library (PlatformIO)
 
 ### Installation
 
-Add to `platformio.ini`:
+```bash
+git submodule add https://github.com/dejarn/lumi-protocol.git vendor/lumi-protocol
+```
 
 ```ini
 lib_deps =
-    https://github.com/dejarn/lumi-protocol
+    knolleary/PubSubClient @ ^2.8
+lib_extra_dirs =
+    vendor/lumi-protocol/device
 ```
+
+See [`docs/consumption.md`](docs/consumption.md) for why a bare GitHub URL in `lib_deps` does not work and for local dev alternatives.
 
 ### Usage
 
