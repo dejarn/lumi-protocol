@@ -71,7 +71,7 @@ describe('LumiClient — command methods publish to correct topic', () => {
   it('setPower publishes on lumi/device/<id>/cmd', () => {
     const p = client.setPower(DEVICE_ID, true);
     expect(mqtt.publish).toHaveBeenCalledWith(
-      `lumi/device/${DEVICE_ID}/cmd`,
+      `lumi/device/${DEVICE_ID.toString(16).padStart(4, '0')}/cmd`,
       expect.any(Buffer),
       expect.any(Function),
     );
@@ -130,6 +130,41 @@ describe('LumiClient — command methods publish to correct topic', () => {
     expect(result).toBeUndefined();
     const decoded = codec.decode(mqtt.publish.mock.lastCall![1]);
     expect(decoded.opc).toBe(Opcode.GET_STATE);
+  });
+
+  it('cmd topic renders deviceId as lowercase 4-digit hex (not decimal)', () => {
+    const p = client.setPower(0xa3f1, true);
+    expect(mqtt.publish.mock.lastCall![0]).toBe('lumi/device/a3f1/cmd');
+    sendAck(mqtt, lastPublishedSeq(mqtt));
+    return p.catch(() => {});
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('LumiClient — discover and zone validation', () => {
+  let mqtt: ReturnType<typeof makeMqtt>;
+  let client: LumiClient;
+
+  beforeEach(() => {
+    mqtt = makeMqtt();
+    client = makeClient(mqtt);
+  });
+
+  it('discover() broadcasts DISCOVERY_REQUEST on lumi/discovery/request', () => {
+    client.discover();
+    expect(mqtt.publish.mock.lastCall![0]).toBe('lumi/discovery/request');
+    const decoded = codec.decode(mqtt.publish.mock.lastCall![1]);
+    expect(decoded.opc).toBe(Opcode.DISCOVERY_REQUEST);
+    expect(decoded.deviceId).toBe(0xffff);
+  });
+
+  it('setZone rejects zoneId 0xFF (reserved)', async () => {
+    await expect(client.setZone(DEVICE_ID, 0xff)).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it('setZone rejects zoneId out of range', async () => {
+    await expect(client.setZone(DEVICE_ID, 300)).rejects.toBeInstanceOf(RangeError);
   });
 });
 

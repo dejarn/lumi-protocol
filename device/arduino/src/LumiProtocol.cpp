@@ -212,6 +212,7 @@ void LumiProtocol::_dispatchOpcode(const LumiParsedFrame& f) {
     case LUMI_OPC_SET_ZONE: {
         if (f.payloadLen < 1u) { _sendError(0x02u, f.opc); return; }
         const uint8_t newZone = f.payload[0];
+        if (newZone == 0xFFu) { _sendError(0x02u, f.opc); return; }  // 0xFF reserved (spec)
 
         {
             Preferences prefs;

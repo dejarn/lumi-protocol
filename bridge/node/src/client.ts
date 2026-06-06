@@ -16,6 +16,8 @@ import {
   PROTO_VERSION,
 } from './types';
 
+const deviceIdHex = (id: number): string => id.toString(16).padStart(4, '0');
+
 interface MqttClient {
   publish(topic: string, message: Buffer, callback?: (err?: Error) => void): void;
   subscribe(topic: string | string[], callback?: (err: Error | null) => void): void;
@@ -89,6 +91,9 @@ export class LumiClient extends EventEmitter {
   }
 
   setZone(deviceId: number, zoneId: number): Promise<void> {
+    if (zoneId < 0 || zoneId > 254) {
+      return Promise.reject(new RangeError(`zoneId out of range [0,254]: ${zoneId}`));
+    }
     return this.sendAndAck(
       this.makeFrame(Opcode.SET_ZONE, deviceId, { zoneId }),
     );
@@ -98,9 +103,15 @@ export class LumiClient extends EventEmitter {
     this.send(this.makeFrame(Opcode.GET_STATE, deviceId, {}));
   }
 
+  /** Broadcast DISCOVERY_REQUEST to all devices on lumi/discovery/request. Fire-and-forget (no ACK). */
+  discover(): void {
+    const frame = this.makeFrame(Opcode.DISCOVERY_REQUEST, 0xffff, {});
+    this.mqtt.publish('lumi/discovery/request', this.codec.encode(frame));
+  }
+
   send(frame: LumiFrame): void {
     const buf = this.codec.encode(frame);
-    const topic = `lumi/device/${frame.deviceId}/cmd`;
+    const topic = `lumi/device/${deviceIdHex(frame.deviceId)}/cmd`;
     const { deviceId, seq } = frame;
     this.mqtt.publish(topic, buf, (err) => {
       if (!err) return;
