@@ -5,6 +5,22 @@ Format: [SemVer](https://semver.org) — protocol version maps to `VER` byte in 
 
 ---
 
+## [Unreleased]
+
+Documentation/clarification only — no frame or opcode change.
+
+### Changed
+- ACK delivery policy clarified to **best-effort**: 5 s timeout, no automatic retransmission, ACK timeout does not affect reachability. Supersedes the earlier "retransmit 3× at 2 s" wording, which was never implemented and contradicted the bridge's best-effort design.
+
+### Added (bridge/node)
+- `LumiClient.discover()` — broadcasts `DISCOVERY_REQUEST` (DEVICE_ID `0xFFFF`) on `lumi/discovery/request`.
+
+### Fixed (bridge/node)
+- `/cmd` topic now renders DEVICE_ID as lowercase 4-digit hex (`a3f1`), matching device subscriptions and the spec. Previously published to a decimal topic, so commands never reached devices.
+- `setZone` / device `SET_ZONE` now reject reserved `ZONE_ID 0xFF`.
+
+---
+
 ## [1.1.0] — 2026-06-05
 
 Transport-only additions. **No frame change** — the `VER` byte stays `0x01`; existing devices and parsers are unaffected.

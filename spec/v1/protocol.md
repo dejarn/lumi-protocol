@@ -259,7 +259,7 @@ The two are orthogonal: changing `BRIGHTNESS` never alters the stored color, and
 | `DISCOVERY_*` | No |
 | `ERROR` | No |
 
-**Retransmission policy (Raspberry Pi side):** If no ACK is received within 2 seconds, retransmit with the same `SEQ`. Maximum 3 attempts. After 3 failures, log an error and mark device as unreachable.
+**Delivery policy (Raspberry Pi side):** Command delivery is best-effort. The controller waits up to 5 seconds for an `ACK` matching the sent `SEQ`; on timeout the command is reported as failed to the caller. There is **no automatic retransmission** — a failed command does not retry or block others. An ACK timeout does **not** mark the device unreachable (a busy device is not an offline one); reachability is derived solely from the `lumi/device/{device_id}/availability` LWT topic.
 
 ## Version Negotiation
 

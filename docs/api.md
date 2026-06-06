@@ -16,13 +16,15 @@ import { LumiCodec, LumiClient, DeviceRegistry } from 'lumi-protocol'
 
 **`LumiCodec`** — stateless encode/decode. No MQTT, no I/O. Testable in isolation. Throws `LumiDecodeError` on invalid buffer, bad CRC, or unsupported version.
 
-**`LumiClient`** — receives an existing `mqtt.js` client (no second broker connection). Extends `EventEmitter` with typed events: `discovery`, `availability`, `state_report`, `ack`, `error`. High-level command methods return a `Promise` that resolves on ACK, plus a `send()` escape hatch for future opcodes.
+**`LumiClient`** — receives an existing `mqtt.js` client (no second broker connection). Extends `EventEmitter` with typed events: `discovery`, `availability`, `state_report`, `ack`, `error`. High-level command methods return a `Promise` that resolves on ACK, `discover()` broadcasts a `DISCOVERY_REQUEST`, plus a `send()` escape hatch for future opcodes. Device IDs are numbers; the `/cmd` topic is rendered as lowercase 4-digit hex.
 
 **`DeviceRegistry`** — in-memory device catalogue. mqtt-bridge populates it from PostgreSQL at startup and delegates persistence to the database. `setReachable` / `markUnreachable` update reachability; `setReachable` buffers state for devices not yet discovered.
 
 ### Wiring (mqtt-bridge usage)
 
 ```typescript
+import { LumiCodec, LumiClient, DeviceRegistry, AnimationId } from 'lumi-protocol'
+
 const mqttClient = mqtt.connect('mqtt://localhost')
 const codec      = new LumiCodec()
 const client     = new LumiClient(mqttClient, codec)
@@ -47,9 +49,11 @@ client.on('state_report', (deviceId, state) => {
   db.updateDeviceState(deviceId, state)
 })
 
-await client.setPower('a3f1', true)
-await client.setColor('a3f1', { h: 32768, s: 255, b: 200 })
-await client.setAnimation('a3f1', 'BREATHE', { speed: 128, intensity: 200 })
+// deviceId is a number (the 2-byte DEVICE_ID); the cmd topic is rendered as
+// lowercase 4-digit hex internally (0xa3f1 → lumi/device/a3f1/cmd).
+await client.setPower(0xa3f1, true)
+await client.setColor(0xa3f1, { h: 32768, s: 255, b: 200 })
+await client.setAnimation(0xa3f1, AnimationId.BREATHE, { speed: 128, intensity: 200 })
 ```
 
 ### ACK behaviour
