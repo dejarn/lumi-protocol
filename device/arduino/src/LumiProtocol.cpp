@@ -86,7 +86,9 @@ bool LumiProtocol::_reconnectMqtt() {
     char clientId[16];
     snprintf(clientId, sizeof(clientId), "lumi-%04x", _deviceId);
 
-    if (!_mqtt.connect(clientId, _topicAvailability, 0, true, "offline")) return false;
+    const char* user = _mqttUser[0] != '\0' ? _mqttUser : nullptr;
+    const char* pass = _mqttUser[0] != '\0' ? _mqttPass : nullptr;
+    if (!_mqtt.connect(clientId, user, pass, _topicAvailability, 0, true, "offline")) return false;
 
     _mqtt.publish(_topicAvailability, "online", true);
 
@@ -100,11 +102,21 @@ bool LumiProtocol::_reconnectMqtt() {
 
 bool LumiProtocol::begin(const char* wifiSsid, const char* wifiPass,
                          const char* brokerIp, const char* deviceName,
-                         uint16_t brokerPort) {
+                         uint16_t brokerPort,
+                         const char* mqttUser, const char* mqttPass) {
     _instance = this;
 
     strncpy(_deviceName, deviceName, sizeof(_deviceName) - 1u);
     _deviceName[sizeof(_deviceName) - 1u] = '\0';
+
+    if (mqttUser != nullptr) {
+        strncpy(_mqttUser, mqttUser, sizeof(_mqttUser) - 1u);
+        _mqttUser[sizeof(_mqttUser) - 1u] = '\0';
+    }
+    if (mqttPass != nullptr) {
+        strncpy(_mqttPass, mqttPass, sizeof(_mqttPass) - 1u);
+        _mqttPass[sizeof(_mqttPass) - 1u] = '\0';
+    }
 
     WiFi.begin(wifiSsid, wifiPass);
     const unsigned long wifiDeadline = millis() + 30000UL;

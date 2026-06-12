@@ -67,7 +67,8 @@ public:
 
   bool begin(const char* wifiSsid, const char* wifiPass,
              const char* brokerIp, const char* deviceName,
-             uint16_t brokerPort = 1883);
+             uint16_t brokerPort = 1883,
+             const char* mqttUser = nullptr, const char* mqttPass = nullptr);
 
   void loop();
 
@@ -90,6 +91,10 @@ private:
     uint16_t      _brokerPort      = 1883;
     unsigned long _lastReconnectMs = 0;
     char     _deviceName[33] = {};     // null-terminated, max 32 UTF-8 bytes
+
+    // ── MQTT credentials — empty string = anonymous connection ───────────────
+    char _mqttUser[33] = {};
+    char _mqttPass[65] = {};
 
     // ── Pre-built MQTT topic strings (computed once in begin()) ───────────────
     char _topicDeviceCmd      [kLumiTopicLen] = {};  // lumi/device/{id}/cmd
