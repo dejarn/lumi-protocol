@@ -213,3 +213,8 @@ pio run -t upload         # flash to connected ESP32
 > **Arduino tests need a host C++ compiler (`g++`).** On Windows, run via WSL (command above). `pio test` from PowerShell alone fails without MinGW.
 
 The spec in [`spec/v1/`](spec/v1/) is the source of truth for both libraries. When adding features, update the spec first — see the [adding an opcode](CLAUDE.md) workflow.
+
+## Related
+
+- [lumi](https://github.com/dejarn/lumi) — the self-hosted platform (Next.js UI, automations, mqtt-bridge)
+- [lumi-firmware](https://github.com/dejarn/lumi-firmware) — the firmware for the custom ESP32 LED strip controllers
